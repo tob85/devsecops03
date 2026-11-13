@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   backend:
     name: Backend tests
@@ -20,6 +27,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Run tests
         run: dotnet test tests/socialmediaapi.Tests.csproj --configuration Release --nologo
+      - name: Check vulnerable NuGet packages
+        run: dotnet restore tests/socialmediaapi.Tests.csproj -p:NuGetAudit=true -p:NuGetAuditLevel=critical -p:NuGetAuditMode=all -p:WarningsAsErrors=NU1900%3BNU1904 --nologo
 
   frontend:
     name: Frontend tests
@@ -40,26 +49,5 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run tests
         run: npm run test:e2e
-      - name: Upload Playwright report
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-report
-          path: frontend/playwright-report/
-          retention-days: 7
-      - name: Generate npm audit report
-        run: npm audit --json > npm-audit-report.json
-        continue-on-error: true
-      #- name: install jq
-      #  uses: dcarbone/install-jq-action@v4
-      - name: Upload npm audit report
-        uses: actions/upload-artifact@v7
-        with:
-          name: npm-audit-report
-          path: frontend/npm-audit-report.json
-          retention-days: 7
       - name: Check vulnerable npm packages
-        run: test $(jq .metadata.vulnerabilities.critical npm-audit-report.json) -eq 0
-      - if: failure()
-        run: echo "There are critical vulnerabilities amongst the installed npm packages"
-
+        run: npm audit --audit-level=critical
