@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import { joinCircle, listAvailableCircles, type CircleSummary } from '@/api/circles'
+import { joinCircle, listAvailableCircles, type Circle } from '@/api/circles'
 
-const circles = ref<CircleSummary[]>([])
+const circles = ref<Circle[]>([])
 const error = ref('')
 const pending = ref(false)
 
@@ -10,8 +10,7 @@ async function loadCircles() {
   error.value = ''
   pending.value = true
   try {
-    const result = await listAvailableCircles()
-    circles.value = result.circles
+    circles.value = await listAvailableCircles()
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not load circles'
   } finally {
@@ -19,7 +18,7 @@ async function loadCircles() {
   }
 }
 
-async function onJoin(circle: CircleSummary) {
+async function onJoin(circle: Circle) {
   error.value = ''
   try {
     await joinCircle(circle.id)
@@ -46,17 +45,17 @@ onMounted(() => {
       <li
         v-for="circle in circles"
         :key="circle.id"
-        :class="{ private: circle.visibility === 'private' }"
+        :class="{ private: circle.isPrivate }"
         :data-circle-name="circle.name"
-        :data-visibility="circle.visibility"
+        :data-visibility="circle.isPrivate ? 'private' : 'public'"
       >
         <div>
           <strong>{{ circle.name }}</strong>
-          <span v-if="circle.visibility === 'private'" class="private-badge">Private</span>
-          <p class="meta">{{ circle.visibility }}</p>
+          <span v-if="circle.isPrivate" class="private-badge">Private</span>
+          <p class="meta">{{ circle.isPrivate ? 'private' : 'public' }}</p>
         </div>
         <button
-          v-if="circle.visibility === 'public'"
+          v-if="!circle.isPrivate"
           type="button"
           :aria-label="`Join ${circle.name}`"
           @click="onJoin(circle)"

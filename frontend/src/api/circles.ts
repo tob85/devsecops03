@@ -1,47 +1,46 @@
 import { api } from './client'
 
-export type CircleRole = 'owner' | 'member'
+export type CircleRole = 'Owner' | 'Moderator' | 'Member'
 
-export type CircleSummary = {
-  id: string
+export type Circle = {
+  id: number
   name: string
-  visibility: string
+  description: string
+  createdByUserId: string
+  createdAt: string
+  isPrivate: boolean
+  role?: CircleRole
 }
 
-export type Circle = CircleSummary & {
-  role: CircleRole
-}
-
-export type CirclesResponse = {
-  circles: Circle[]
-}
-
-export type AvailableCirclesResponse = {
-  circles: CircleSummary[]
+export type CreateCircleRequest = {
+  name: string
+  description?: string
+  isPrivate: boolean
 }
 
 export function listMyCircles() {
-  return api<CirclesResponse>('/circles')
+  return api<Circle[]>('/groups/mine')
 }
 
 export function listAvailableCircles() {
-  return api<AvailableCirclesResponse>('/circles/available')
+  return api<Circle[]>('/groups/available')
 }
 
-export function getCircle(circleId: string) {
-  return api<Circle>(`/circles/${circleId}`)
-}
-
-export function joinCircle(circleId: string) {
-  return api<{ message: string }>('/circles/join', {
+export function createCircle(body: CreateCircleRequest) {
+  return api<Circle>('/groups', {
     method: 'POST',
-    body: { circleId },
+    body,
   })
 }
 
-export function leaveCircle(circleId: string) {
-  return api<{ message: string }>('/circles/leave', {
+export function joinCircle(circleId: number) {
+  return api<{ circleId: number; userId: string; role: CircleRole }>(`/groups/${circleId}/members`, {
     method: 'POST',
-    body: { circleId },
+  })
+}
+
+export function leaveCircle(circleId: number) {
+  return api<{ message: string }>(`/groups/${circleId}/leave`, {
+    method: 'POST',
   })
 }

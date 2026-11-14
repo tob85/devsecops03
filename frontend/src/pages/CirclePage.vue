@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { getCircle, type Circle } from '@/api/circles'
+import { listMyCircles, type Circle } from '@/api/circles'
 import { createPost, listPosts, type Post } from '@/api/posts'
 
 const route = useRoute()
-const circleId = computed(() => String(route.params.id ?? ''))
+const circleId = computed(() => Number(route.params.id))
 
 const circle = ref<Circle | null>(null)
 const posts = ref<Post[]>([])
@@ -17,16 +17,18 @@ const posting = ref(false)
 async function load() {
   error.value = ''
   pending.value = true
+  circle.value = null
+  posts.value = []
   try {
-    const [circleResult, postsResult] = await Promise.all([
-      getCircle(circleId.value),
-      listPosts(circleId.value),
-    ])
-    circle.value = circleResult
-    posts.value = postsResult.posts
+    const circles = await listMyCircles()
+    const current = circles.find((item) => item.id === circleId.value) ?? null
+    if (!current) {
+      error.value = 'Group not found'
+      return
+    }
+    circle.value = current
+    posts.value = await listPosts(current.id)
   } catch (err) {
-    circle.value = null
-    posts.value = []
     error.value = err instanceof Error ? err.message : 'Could not load circle'
   } finally {
     pending.value = false
@@ -34,11 +36,14 @@ async function load() {
 }
 
 async function onSubmit() {
+  if (!circle.value) {
+    return
+  }
   error.value = ''
   posting.value = true
   try {
-    const post = await createPost(circleId.value, content.value)
-    posts.value = [post, ...posts.value]
+    const post = await createPost(circle.value.id, content.value)
+    posts.value = [...posts.value, post]
     content.value = ''
   } catch (err) {
     error.value = err instanceof Error ? err.message : 'Could not create post'
@@ -59,7 +64,7 @@ watch(circleId, () => {
 
     <template v-if="circle">
       <h1>{{ circle.name }}</h1>
-      <p>{{ circle.visibility }} · {{ circle.role }}</p>
+      <p>{{ circle.isPrivate ? 'private' : 'public' }} · {{ circle.role }}</p>
 
       <form class="post-form" @submit.prevent="onSubmit">
         <label for="post-content">Post</label>
@@ -78,9 +83,9 @@ watch(circleId, () => {
       <h2>Feed</h2>
       <p v-if="!posts.length">No posts yet.</p>
       <ul v-else class="post-list">
-        <li v-for="post in posts" :key="post.id" :data-post-content="post.content">
-          <p class="post-content">{{ post.content }}</p>
-          <p class="meta">{{ post.author }}</p>
+        <li v-for="post in posts" :key="post.id" :data-post-content="post.message">
+          <p class="post-content">{{ post.message }}</p>
+          <p class="meta">{{ post.userId }}</p>
         </li>
       </ul>
     </template>

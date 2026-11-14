@@ -5,8 +5,9 @@ export const useMocks = import.meta.env.VITE_USE_MOCKS === 'true'
 const delayMs = Number(import.meta.env.VITE_MOCK_DELAY_MS ?? 200)
 
 const pathPatterns: Array<{ key: string; regex: RegExp }> = [
-  { key: '/circles/:id/posts', regex: /^\/circles\/([^/]+)\/posts$/ },
-  { key: '/circles/:id', regex: /^\/circles\/([^/]+)$/ },
+  { key: '/groups/:id/posts', regex: /^\/groups\/([^/]+)\/posts$/ },
+  { key: '/groups/:id/members', regex: /^\/groups\/([^/]+)\/members$/ },
+  { key: '/groups/:id/leave', regex: /^\/groups\/([^/]+)\/leave$/ },
 ]
 
 function resolveHandler(method: string, path: string): { handler: MockHandler; params: Record<string, string> } | null {
