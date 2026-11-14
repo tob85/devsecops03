@@ -10,16 +10,19 @@ type MockUser = {
   password: string
 }
 
-type CircleRole = 'owner' | 'member'
+type CircleRole = 'Owner' | 'Member'
 
 type CatalogCircle = {
-  id: string
+  id: number
   name: string
-  visibility: 'public' | 'private'
+  description: string
+  isPrivate: boolean
+  createdByUserId: string
+  createdAt: string
 }
 
 type Membership = {
-  circleId: string
+  circleId: number
   role: CircleRole
 }
 
@@ -30,40 +33,61 @@ const users = new Map<string, MockUser>([
 let currentEmail: string | null = null
 
 const catalog: CatalogCircle[] = [
-  { id: 'circle-1', name: 'Weekend Hangouts', visibility: 'private' },
-  { id: 'circle-2', name: 'Open Study Circle', visibility: 'public' },
-  { id: 'circle-3', name: 'Park Playdates', visibility: 'public' },
-  { id: 'circle-4', name: 'Toddler Music Hour', visibility: 'public' },
-  { id: 'circle-5', name: 'Family Reunion', visibility: 'private' },
+  { id: 1, name: 'Weekend Hangouts', description: '', isPrivate: true, createdByUserId: 'ada', createdAt: '2026-10-01T08:00:00.000Z' },
+  { id: 2, name: 'Open Study Circle', description: '', isPrivate: false, createdByUserId: 'ada', createdAt: '2026-10-02T08:00:00.000Z' },
+  { id: 3, name: 'Park Playdates', description: '', isPrivate: false, createdByUserId: 'ada', createdAt: '2026-10-03T08:00:00.000Z' },
+  { id: 4, name: 'Toddler Music Hour', description: '', isPrivate: false, createdByUserId: 'ada', createdAt: '2026-10-04T08:00:00.000Z' },
+  { id: 5, name: 'Family Reunion', description: '', isPrivate: true, createdByUserId: 'ada', createdAt: '2026-10-05T08:00:00.000Z' },
 ]
 
 let memberships: Membership[] = [
-  { circleId: 'circle-1', role: 'owner' },
-  { circleId: 'circle-2', role: 'member' },
+  { circleId: 1, role: 'Owner' },
+  { circleId: 2, role: 'Member' },
 ]
 
 type StoredPost = {
-  id: string
-  circleId: string
-  author: string
-  content: string
+  id: number
+  circleId: number
+  message: string
+  userId: string
   createdAt: string
 }
 
 let postSeq = 2
+let circleSeq = 6
 
 let posts: StoredPost[] = [
   {
-    id: 'post-1',
-    circleId: 'circle-1',
-    author: 'ada@example.com',
-    content: 'Park meetup Saturday at 10?',
+    id: 1,
+    circleId: 1,
+    userId: 'ada@example.com',
+    message: 'Park meetup Saturday at 10?',
     createdAt: '2026-10-06T08:00:00.000Z',
   },
 ]
 
 function asRecord(body: unknown) {
-  return (body ?? {}) as Record<string, string>
+  return (body ?? {}) as Record<string, unknown>
+}
+
+function circleIdFrom(params?: Record<string, string>) {
+  return Number(params?.id)
+}
+
+function membershipFor(circleId: number) {
+  return memberships.find((item) => item.circleId === circleId)
+}
+
+function toGroup(circle: CatalogCircle, role?: CircleRole) {
+  return {
+    id: circle.id,
+    name: circle.name,
+    description: circle.description,
+    createdByUserId: circle.createdByUserId,
+    createdAt: circle.createdAt,
+    isPrivate: circle.isPrivate,
+    ...(role ? { role } : {}),
+  }
 }
 
 function myCircles() {
@@ -72,31 +96,20 @@ function myCircles() {
     if (!circle) {
       return []
     }
-    return [{ ...circle, role: membership.role }]
+    return [toGroup(circle, membership.role)]
   })
 }
 
 function availableCircles() {
   const memberIds = new Set(memberships.map((item) => item.circleId))
-  return catalog.filter((circle) => !memberIds.has(circle.id))
-}
-
-function membershipFor(circleId: string) {
-  return memberships.find((item) => item.circleId === circleId)
-}
-
-function circleWithRole(circleId: string) {
-  const circle = catalog.find((item) => item.id === circleId)
-  const membership = membershipFor(circleId)
-  if (!circle || !membership) {
-    return null
-  }
-  return { ...circle, role: membership.role }
+  return catalog.filter((circle) => !memberIds.has(circle.id)).map((circle) => toGroup(circle))
 }
 
 export const handlers: Record<string, MockHandler> = {
   'POST /auth/register'(body) {
-    const { email, password } = asRecord(body)
+    const record = asRecord(body)
+    const email = String(record.email ?? '')
+    const password = String(record.password ?? '')
     if (!email || !password) {
       return { status: 400, body: { message: 'Email and password are required' } }
     }
@@ -108,7 +121,9 @@ export const handlers: Record<string, MockHandler> = {
   },
 
   'POST /auth/login'(body) {
-    const { email, password } = asRecord(body)
+    const record = asRecord(body)
+    const email = String(record.email ?? '')
+    const password = String(record.password ?? '')
     if (!email || !password) {
       return { status: 400, body: { message: 'Email and password are required' } }
     }
@@ -135,80 +150,88 @@ export const handlers: Record<string, MockHandler> = {
     return { status: 200, body: { message: 'user logged out' } }
   },
 
-  'GET /circles'() {
-    return { status: 200, body: { circles: myCircles() } }
+  'GET /groups/mine'() {
+    return { status: 200, body: myCircles() }
   },
 
-  'GET /circles/available'() {
-    return { status: 200, body: { circles: availableCircles() } }
+  'GET /groups/available'() {
+    return { status: 200, body: availableCircles() }
   },
 
-  'POST /circles/join'(body) {
-    const { circleId } = asRecord(body)
+  'POST /groups'(body) {
+    const record = asRecord(body)
+    const name = String(record.name ?? '').trim()
+    if (!name) {
+      return { status: 400, body: { message: 'Name is required' } }
+    }
+    const circle: CatalogCircle = {
+      id: circleSeq++,
+      name,
+      description: String(record.description ?? '').trim(),
+      isPrivate: Boolean(record.isPrivate),
+      createdByUserId: currentEmail ?? 'ada@example.com',
+      createdAt: new Date().toISOString(),
+    }
+    catalog.push(circle)
+    memberships = [...memberships, { circleId: circle.id, role: 'Owner' }]
+    return { status: 200, body: toGroup(circle, 'Owner') }
+  },
+
+  'POST /groups/:id/members'(_body, params) {
+    const circleId = circleIdFrom(params)
     const circle = catalog.find((item) => item.id === circleId)
     if (!circle) {
-      return { status: 404, body: { message: 'Circle not found' } }
+      return { status: 404, body: { message: 'Group not found' } }
     }
     if (memberships.some((item) => item.circleId === circleId)) {
-      return { status: 400, body: { message: 'Already a member of this circle' } }
+      return { status: 409, body: { message: 'Already a member' } }
     }
-    if (circle.visibility !== 'public') {
-      return { status: 400, body: { message: 'Private circles cannot be joined directly' } }
-    }
-    memberships = [...memberships, { circleId: circle.id, role: 'member' }]
-    return { status: 200, body: { message: 'joined circle' } }
+    memberships = [...memberships, { circleId, role: 'Member' }]
+    return { status: 200, body: { circleId, userId: currentEmail ?? 'ada@example.com', role: 'Member' } }
   },
 
-  'POST /circles/leave'(body) {
-    const { circleId } = asRecord(body)
-    const membership = memberships.find((item) => item.circleId === circleId)
+  'POST /groups/:id/leave'(_body, params) {
+    const circleId = circleIdFrom(params)
+    const membership = membershipFor(circleId)
     if (!membership) {
-      return { status: 404, body: { message: 'Circle not found' } }
+      return { status: 404, body: { message: 'Group not found' } }
     }
-    if (membership.role === 'owner') {
+    if (membership.role === 'Owner') {
       return { status: 400, body: { message: 'Owners cannot leave their circle' } }
     }
     memberships = memberships.filter((item) => item.circleId !== circleId)
     return { status: 200, body: { message: 'left circle' } }
   },
 
-  'GET /circles/:id'(_body, params) {
-    const circle = circleWithRole(params?.id ?? '')
-    if (!circle) {
-      return { status: 404, body: { message: 'Circle not found' } }
-    }
-    return { status: 200, body: circle }
-  },
-
-  'GET /circles/:id/posts'(_body, params) {
-    const circleId = params?.id ?? ''
+  'GET /groups/:id/posts'(_body, params) {
+    const circleId = circleIdFrom(params)
     if (!membershipFor(circleId)) {
-      return { status: 403, body: { message: 'Not a member of this circle' } }
+      return { status: 403, body: { message: 'Not a member' } }
     }
     const circlePosts = posts
       .filter((post) => post.circleId === circleId)
       .slice()
-      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
-    return { status: 200, body: { posts: circlePosts } }
+      .sort((a, b) => a.id - b.id)
+    return { status: 200, body: circlePosts }
   },
 
-  'POST /circles/:id/posts'(body, params) {
-    const circleId = params?.id ?? ''
+  'POST /groups/:id/posts'(body, params) {
+    const circleId = circleIdFrom(params)
     if (!membershipFor(circleId)) {
-      return { status: 403, body: { message: 'Not a member of this circle' } }
+      return { status: 403, body: { message: 'Not a member' } }
     }
-    const { content } = asRecord(body)
-    if (!content?.trim()) {
-      return { status: 400, body: { message: 'Post content is required' } }
+    const message = String(asRecord(body).message ?? '').trim()
+    if (!message) {
+      return { status: 400, body: { message: 'Message is required' } }
     }
     const post: StoredPost = {
-      id: `post-${postSeq++}`,
+      id: postSeq++,
       circleId,
-      author: currentEmail ?? 'ada@example.com',
-      content: content.trim(),
+      userId: currentEmail ?? 'ada@example.com',
+      message,
       createdAt: new Date().toISOString(),
     }
-    posts = [post, ...posts]
+    posts = [...posts, post]
     return { status: 200, body: post }
   },
 }
